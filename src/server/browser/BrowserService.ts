@@ -17,6 +17,42 @@ interface BrowserSession {
   saveInterval?: NodeJS.Timeout;
 }
 
+/**
+ * Find the Chromium executable by scanning known installation directories.
+ * Checks PLAYWRIGHT_BROWSERS_PATH and the default ~/.cache/ms-playwright location.
+ * Returns undefined if no binary is found (triggering auto-install fallback).
+ */
+function findChromiumExecutable(): string | undefined {
+  const searchDirs = [
+    process.env.PLAYWRIGHT_BROWSERS_PATH,
+    '/ms-playwright',
+    path.join(process.env.HOME || '/root', '.cache', 'ms-playwright'),
+  ].filter(Boolean) as string[];
+
+  for (const dir of searchDirs) {
+    if (!fs.existsSync(dir)) continue;
+    try {
+      const entries = fs.readdirSync(dir);
+      for (const entry of entries) {
+        if (!entry.startsWith('chromium-')) continue;
+        const candidates = [
+          path.join(dir, entry, 'chrome-linux', 'chrome'),
+          path.join(dir, entry, 'chrome-mac', 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
+        ];
+        for (const candidate of candidates) {
+          if (fs.existsSync(candidate)) {
+            console.log(`[BrowserService] Found Chromium at: ${candidate}`);
+            return candidate;
+          }
+        }
+      }
+    } catch (e) {
+      // ignore readdir errors, try next dir
+    }
+  }
+  return undefined;
+}
+
 export class BrowserService {
   private browser: Browser | null = null;
   private sessions: Map<string, BrowserSession> = new Map();
@@ -44,35 +80,45 @@ export class BrowserService {
     try {
       console.log("[BrowserService] Launching Chromium...");
       const start = Date.now();
+
+      const launchArgs = [
+        '--disable-gpu',
+        '--disable-dev-shm-usage',
+        '--disable-setuid-sandbox',
+        '--no-sandbox',
+        '--disable-site-isolation-trials',
+        '--disable-blink-features=AutomationControlled'
+      ];
+
+      // Find pre-installed Chromium binary directly (avoids dependency on env var)
+      const executablePath = findChromiumExecutable();
+
       try {
-        this.browser = await chromium.launch({
-          headless: true, // Use headless by default, configurable
-          args: [
-            '--disable-gpu',
-            '--disable-dev-shm-usage',
-            '--disable-setuid-sandbox',
-            '--no-sandbox',
-            '--site-per-process', // Needed sometimes for isolation? Let's just avoid site-per-process to prevent process swaps:
-            '--disable-site-isolation-trials',
-            '--disable-blink-features=AutomationControlled' // Extra stealth
-          ]
-        });
+        const launchOptions: any = {
+          headless: true,
+          args: launchArgs,
+        };
+        if (executablePath) {
+          launchOptions.executablePath = executablePath;
+          console.log(`[BrowserService] Using pre-installed Chromium: ${executablePath}`);
+        }
+        this.browser = await chromium.launch(launchOptions);
       } catch (err: any) {
         if (err.message && err.message.includes("Executable doesn't exist")) {
            console.log("Playwright executable missing, installing...");
            const child_process = await import('child_process');
-           child_process.execSync('npx playwright install chromium', { stdio: 'inherit' });
-           this.browser = await chromium.launch({
-              headless: true,
-              args: [
-                '--disable-gpu',
-                '--disable-dev-shm-usage',
-                '--disable-setuid-sandbox',
-                '--no-sandbox',
-                '--disable-site-isolation-trials',
-                '--disable-blink-features=AutomationControlled' // Extra stealth
-              ]
+           // Install to /ms-playwright explicitly
+           child_process.execSync('PLAYWRIGHT_BROWSERS_PATH=/ms-playwright npx playwright install chromium', {
+             stdio: 'inherit',
+             env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: '/ms-playwright' }
            });
+           const retryPath = findChromiumExecutable();
+           const retryOptions: any = {
+             headless: true,
+             args: launchArgs,
+           };
+           if (retryPath) retryOptions.executablePath = retryPath;
+           this.browser = await chromium.launch(retryOptions);
         } else {
            throw err;
         }
