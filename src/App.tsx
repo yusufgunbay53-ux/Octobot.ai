@@ -444,8 +444,11 @@ export default function App() {
                             if (clickX < 0 || clickX > renderW || clickY < 0 || clickY > renderH) return;
                             const x = (clickX / renderW) * naturalW;
                             const y = (clickY / renderH) * naturalH;
+
+                            // Send click event
+                            wsRef.current.send(JSON.stringify({ type: "click", x, y }));
                             
-                            // Check if an input was clicked
+                            // Check if an input was clicked for mobile keyboard support
                             const pad = 15;
                             const clickedInput = inputRects.find(r => 
                                 x >= (r.x - pad) && x <= (r.x + r.w + pad) && 
@@ -462,12 +465,12 @@ export default function App() {
                                 hiddenInputRef.current.style.top = `${top}%`;
                                 hiddenInputRef.current.style.width = `${width}%`;
                                 hiddenInputRef.current.style.height = `${height}%`;
-                                hiddenInputRef.current.style.display = 'block';
+                                hiddenInputRef.current.style.display = "block";
                                 
                                 setKeyboardInput(clickedInput.val || "");
                                 hiddenInputRef.current.focus({ preventScroll: true });
                             } else if (hiddenInputRef.current) {
-                                hiddenInputRef.current.style.display = 'none';
+                                hiddenInputRef.current.style.display = "none";
                                 hiddenInputRef.current.blur();
                             }
                          }}
@@ -495,33 +498,7 @@ export default function App() {
                             if (clickX < 0 || clickX > renderW || clickY < 0 || clickY > renderH) return;
                             const x = (clickX / renderW) * naturalW;
                             const y = (clickY / renderH) * naturalH;
-                            wsRef.current.send(JSON.stringify({ type: 'mousemove', x, y }));
-                         }}
-                         onClick={(e) => {
-                            if (isAiLoading || !wsRef.current) return;
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            const img = e.currentTarget;
-                            const naturalW = img.naturalWidth;
-                            const naturalH = img.naturalHeight;
-                            const imageAspect = naturalW / naturalH;
-                            const canvasAspect = rect.width / rect.height;
-                            let renderW = rect.width;
-                            let renderH = rect.height;
-                            let offsetX = 0;
-                            let offsetY = 0;
-                            if (imageAspect > canvasAspect) {
-                              renderH = rect.width / imageAspect;
-                              offsetY = (rect.height - renderH) / 2;
-                            } else {
-                              renderW = rect.height * imageAspect;
-                              offsetX = (rect.width - renderW) / 2;
-                            }
-                            let clickX = e.clientX - rect.left - offsetX;
-                            let clickY = e.clientY - rect.top - offsetY;
-                            if (clickX < 0 || clickX > renderW || clickY < 0 || clickY > renderH) return;
-                            const x = (clickX / renderW) * naturalW;
-                            const y = (clickY / renderH) * naturalH;
-                            wsRef.current.send(JSON.stringify({ type: 'click', x, y }));
+                            wsRef.current.send(JSON.stringify({ type: "mousemove", x, y }));
                          }}
                          onWheel={(e) => {
                             if (isAiLoading || !wsRef.current) return;

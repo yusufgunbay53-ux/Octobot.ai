@@ -9,7 +9,7 @@ import { browserService } from "./src/server/browser/BrowserService";
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
   
   const httpServer = createHttpServer(app);
   const wss = new WebSocketServer({ server: httpServer, path: '/api/browser/stream' });
